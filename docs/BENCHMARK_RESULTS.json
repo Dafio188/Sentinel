@@ -1,0 +1,6 @@
+{
+  "preflight_gate_avg_ms": 18.08,
+  "rule_engine_avg_ms": 11.24,
+  "retrieval_rrf_avg_ms": 0.47,
+  "anonymizer_engine_ms": 0.0
+}

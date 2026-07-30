@@ -2,17 +2,21 @@
 
 Tutti i cambiamenti notevoli a questo progetto saranno documentati in questo file.
 
-## [Unreleased] - M5 Interfaccia Utente Desktop Local (`m5-desktop-ui`)
+## [1.0.0] - M6 Hardening, Benchmark, Pacchettizzazione & Consegna Finale (`m6-final-delivery`)
 
 ### Aggiunto
-- **Infrastruttura Frontend Next.js** ([frontend/](file:///c:/Users/info/Documents/Sentinell/frontend/)): Setup Next.js 14 App Router, Tailwind CSS, Framer Motion, Lucide Icons e Sonner per i toast notifiche.
-- **Client API TypeScript** ([api.ts](file:///c:/Users/info/Documents/Sentinell/frontend/lib/api.ts)): Client per comunicare in locale con le API REST di AIGate su `http://127.0.0.1:8000/api`.
-- **Layout & Estetica "The Apple Feel"** ([globals.css](file:///c:/Users/info/Documents/Sentinell/frontend/app/globals.css)): Glassmorphism (`backdrop-blur-xl`), squirkle radius, micro-interazioni spring physics, modalità OLED pure black ed interfaccia completamente in italiano.
-- **Dashboard Principale** ([page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/page.tsx)): Widget delle 3 Zone di Sicurezza (0=RED, 1=AMBER, 2=GREEN), contatori documenti scansionati, badge di integrità dell'Audit Chain e stato dei servizi.
-- **Privacy Center** ([privacy/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/frontend/app/privacy/page.tsx)): Upload drag-and-drop, tabella entità PII con evidenziazione per categoria (`SPECIAL`, `IDENTIFIER`, `FINANCIAL`), selettore di strategia (`MASK`, `REPLACE`, `GENERALIZE`, `REMOVE`, `SEMANTIC`), visualizzatore Diff interattivo (originale vs protetto) e sblocco Vault con passphrase.
-- **Compliance Wizard & Assessment** ([compliance/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/compliance/page.tsx)): Wizard adattivo passo-passo con domande dinamiche, report per aree cromatiche (🟢/🟡/🟠/🔴/⚪) e albero interattivo della Compliance Chain Traversal.
-- **LLM Gateway & Chat Interface** ([gateway/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/gateway/page.tsx)): Matrice dei provider LLM con indicatore di blocco/lock su DeepSeek e verifica loopback per Ollama, chat con status Pre-flight Gate ed avvisi PII/HR in tempo reale.
-- **Audit & ARKS Knowledge Center** ([audit/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/audit/page.tsx)): Registro eventi di audit con pulsante "Verifica Integrità Catena" e gestore versioni KB (`KB-2026.07-A` e `KB-2026.07-B`) con pulsante di approvazione umana ("Conferma e Attiva").
+- **Script di Hardening della Sicurezza** ([verify_security_hardening.py](file:///c:/Users/info/Documents/Sentinell/scripts/verify_security_hardening.py)): Convalida automatizzata del binding `127.0.0.1`, isolamento Vault, assenza di PII nei log di audit, integrità della catena SHA256 ed egress allowlist.
+- **Suite di Benchmark di Performance** ([run_benchmarks.py](file:///c:/Users/info/Documents/Sentinell/scripts/run_benchmarks.py)): Misurazione delle latenze dell'Anonymizer Engine ($< 150\text{ ms}$), Pre-flight Privacy Gate ($< 20\text{ ms}$), Hybrid Retrieval RRF ($< 50\text{ ms}$) ed esecuzione Rule Engine ($< 30\text{ ms}$), con salvataggio del report `docs/BENCHMARK_RESULTS.json`.
+- **Pacchettizzatore Offline Air-Gapped** ([package_offline.py](file:///c:/Users/info/Documents/Sentinell/scripts/package_offline.py)): Generazione dello zip di distribuzione offline `dist/aigate_offline_v1.0.zip`.
+- **Script di Avvio Rapido**: File di avvio automatico `start_aigate.bat` (Windows) e `start_aigate.sh` (Linux/macOS).
+- **Manuali & Report di Consegna Finale**: [OFFLINE_DEPLOYMENT_GUIDE.md](file:///c:/Users/info/Documents/Sentinell/docs/OFFLINE_DEPLOYMENT_GUIDE.md) e [FINAL_DELIVERY_REPORT.md](file:///c:/Users/info/Documents/Sentinell/docs/FINAL_DELIVERY_REPORT.md).
+
+---
+
+## [0.5.0] - M5 Interfaccia Utente Desktop Local (`m5-desktop-ui`)
+
+### Aggiunto
+- Infrastruttura Next.js 14 App Router, Tailwind CSS, Framer Motion, Lucide Icons, Sonner. Client API TypeScript, estetica "The Apple Feel", 5 viste integrate (Dashboard 3 Zone, Privacy Center con Diff e Vault, Compliance Wizard con report cromatico, LLM Gateway Chat e Audit/ARKS Center).
 
 ---
 
