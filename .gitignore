@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+
+# Data & Vault (ZONA 0 / 1)
+data/*.db
+data/*.sqlite
+vectors/*.db
+documents/original/*
+documents/protected/*
+!documents/original/.gitkeep
+!documents/protected/.gitkeep
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Logs & Temp
+logs/*.log
+extracted_instructions.md
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
