@@ -1,0 +1,30 @@
+{
+  "rule_id": "GDPR.CH5.TRANSFER",
+  "framework": "GDPR",
+  "category": "CLASSIFICATION",
+  "severity": "HIGH",
+  "title": "Trasferimento di Dati Personali verso Paesi Terzi (Capo V GDPR)",
+  "source_refs": [
+    {"source_id": "EU_2016_679", "article": "44-49"}
+  ],
+  "condition": {
+    "and": [
+      {"var": "payload_contains_personal_data"},
+      {"!": [{"in": [{"var": "provider.country"}, ["EU", "EEA", "ADEQUATE"]]}]},
+      {"==": [{"var": "provider.transfer_mechanism"}, "NONE"]}
+    ]
+  },
+  "on_true": {
+    "action": "BLOCK",
+    "gate": "DATA_GATE"
+  },
+  "on_false": {
+    "finding": "TRANSFER_COMPLIANT",
+    "action": "INFO"
+  },
+  "on_unknown": {
+    "finding": "UNKNOWN",
+    "ask": ["Q_DATA_TYPES"]
+  },
+  "kb_version": "KB-2026.07-B"
+}

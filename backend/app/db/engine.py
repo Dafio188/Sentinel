@@ -24,6 +24,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
     try:
         conn.executescript(ddl_sql)
         _seed_providers(conn)
+        _seed_knowledge_versions(conn)
         conn.commit()
     finally:
         conn.close()
@@ -47,4 +48,16 @@ def _seed_providers(conn: sqlite3.Connection) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             p,
+        )
+
+def _seed_knowledge_versions(conn: sqlite3.Connection) -> None:
+    versions = [
+        ("KB-2026.07-A", "2026-07-01", "AI Act baseline + GDPR", 1),
+        ("KB-2026.07-B", "2026-07-30", "AI Act post-Omnibus (default)", 0),
+    ]
+    cursor = conn.cursor()
+    for v in versions:
+        cursor.execute(
+            "INSERT OR IGNORE INTO knowledge_versions (id, published_at, notes, approved_by_human) VALUES (?, ?, ?, ?)",
+            v,
         )

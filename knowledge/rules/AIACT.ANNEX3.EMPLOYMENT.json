@@ -1,0 +1,31 @@
+{
+  "rule_id": "AIACT.ANNEX3.EMPLOYMENT",
+  "framework": "AI_ACT",
+  "category": "HIGH_RISK",
+  "severity": "HIGH",
+  "title": "Sistema ad Alto Rischio — Gestione del Personale e Accesso al Lavoro (Annex III)",
+  "source_refs": [
+    {"source_id": "EU_2024_1689", "article": "6", "paragraph": "2"}
+  ],
+  "effective_from": "2027-12-02",
+  "condition": {
+    "and": [
+      {"==": [{"var": "domain"}, "employment"]},
+      {"in": [{"var": "purpose"}, ["recruitment", "evaluation", "promotion", "termination"]]}
+    ]
+  },
+  "on_true": {
+    "classification": "HIGH_RISK",
+    "action": "REVIEW",
+    "human_review": true
+  },
+  "on_false": {
+    "finding": "NOT_HIGH_RISK_EMPLOYMENT",
+    "action": "INFO"
+  },
+  "on_unknown": {
+    "finding": "UNKNOWN",
+    "ask": ["Q_DOMAIN", "Q_PURPOSE"]
+  },
+  "kb_version": "KB-2026.07-B"
+}

@@ -1,0 +1,32 @@
+{
+  "rule_id": "AIACT.ART5.NCII",
+  "framework": "AI_ACT",
+  "category": "PROHIBITION",
+  "severity": "CRITICAL",
+  "title": "Divieto di generazione o diffusione di contenuti intimi non consenzienti (NCII)",
+  "source_refs": [
+    {"source_id": "EU_2024_1689_OMNIBUS", "article": "5", "version_label": "post-Omnibus-2026"}
+  ],
+  "effective_from": "2026-12-02",
+  "condition": {
+    "and": [
+      {"in": [{"var": "output_type"}, ["IMAGE", "VIDEO"]]},
+      {"var": "generates_intimate_imagery"},
+      {"!": [{"var": "subject_consent"}]}
+    ]
+  },
+  "on_true": {
+    "classification": "PROHIBITED",
+    "action": "BLOCK",
+    "human_review": true
+  },
+  "on_false": {
+    "finding": "NCII_NOT_APPLICABLE",
+    "action": "INFO"
+  },
+  "on_unknown": {
+    "finding": "UNKNOWN",
+    "ask": ["Q_OUTPUT_TYPE"]
+  },
+  "kb_version": "KB-2026.07-B"
+}

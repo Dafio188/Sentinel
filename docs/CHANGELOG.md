@@ -2,43 +2,36 @@
 
 Tutti i cambiamenti notevoli a questo progetto saranno documentati in questo file.
 
-## [Unreleased] - M3 LLM Router & Privacy Gate (`m3-router-gates`)
+## [Unreleased] - M4 ARKS + Compliance Engine (`m4-compliance-arks`)
 
 ### Aggiunto
-- **Provider Registry** ([registry.py](file:///c:/Users/info/Documents/Sentinell/backend/app/llm/registry.py)): Seed dei 5 provider, lock enforcement su `privacy_class_locked` per `deepseek` (403), verifica automatica dell'IP loopback per Ollama e gestione del tier Gemini (`FREE` trattato come `UNKNOWN`).
-- **Connettori LLM Sicuri** ([connectors/](file:///c:/Users/info/Documents/Sentinell/backend/app/llm/connectors/)): Connettore Ollama locale con `num_ctx` esplicito e connettori esterni trasparenti operanti tramite la allowlist egress di `GuardedHttpClient`.
-- **Policy Engine** ([policy.py](file:///c:/Users/info/Documents/Sentinell/backend/app/gate/policy.py)): Valutatore delle policy `STRICT`, `BALANCED` e `CUSTOM`.
-- **Pre-flight Data & Prompt Gate** ([preflight.py](file:///c:/Users/info/Documents/Sentinell/backend/app/gate/preflight.py)):
-  - Invariante I2: Blocco `EXTRACTED` verso provider non-LOCAL.
-  - Controllo `CROSS-02` per PII nel prompt o payload pseudonimizzati.
-  - Applicazione delle restrizioni sui trasferimenti extra-UE (GDPR Capo V / CH5 per DeepSeek).
-  - Rilevamento prompt avversariali o identificazioni personali legate a valutazioni HR (es. "Mario Rossi").
-  - Persistenza in `llm_requests` con rispetto del vincolo `CHECK`.
-- **Chiamata + Post-flight Scanner** ([postflight.py](file:///c:/Users/info/Documents/Sentinell/backend/app/gate/postflight.py)): Scansione risposte LLM per PII in chiaro (`LEAK_SUSPECT`) ed euristica di re-identificazione v1 (`REID_WARNING`).
-- **API REST Gateway** ([router.py](file:///c:/Users/info/Documents/Sentinell/backend/app/api/router.py)): Endpoints `GET/PATCH /providers`, `POST /gate/preflight`, `POST /chat` e `GET /requests/{id}`.
-- **Suite di Test M3** ([test_m3_router_gates.py](file:///c:/Users/info/Documents/Sentinell/backend/tests/test_m3_router_gates.py)): 8 test di accettazione automatizzati per la Definition of Done della M3.
+- **Knowledge Versions Seed**: Pre-popolamento delle versioni `KB-2026.07-A` (AI Act baseline + GDPR) e `KB-2026.07-B` (AI Act post-Omnibus attiva di default con le date di efficacia progressive dell'Art. 50, NCII, Annex III e Annex I).
+- **Ingestione Fonti & Chunking EUR-Lex** ([ingest.py](file:///c:/Users/info/Documents/Sentinell/backend/app/arks/ingest.py)): Strutturazione dei chunk per articolo/comma (`{FRAMEWORK}_ART{n}_{seq}`) e file `scripts/fetch_sources.md` con le fonti ufficiali.
+- **Retrieval Ibrido BM25 + Vector RRF** ([retrieval.py](file:///c:/Users/info/Documents/Sentinell/backend/app/arks/retrieval.py)): Retrieval ibrido con filtri temporali per data di efficacia e versione KB.
+- **Inventario Regole v0.1 in Rule DSL** ([knowledge/rules/](file:///c:/Users/info/Documents/Sentinell/knowledge/rules/)): Regole GDPR, AI Act post-Omnibus e Cross-Framework in formato JSON JsonLogic 3-valued.
+- **Question Bank & Wizard Adattivo Pesato** ([wizard.py](file:///c:/Users/info/Documents/Sentinell/backend/app/compliance/wizard.py)): 14 domande seed con selezione deterministica basata sulla severità delle regole (`CRITICAL`=4, `HIGH`=3, `MED`=2, `LOW`=1).
+- **Assessment Engine & Compliance Chain** ([engine.py](file:///c:/Users/info/Documents/Sentinell/backend/app/compliance/engine.py)): Valutazione a doppia data (oggi vs `deploy_date`), Compliance Chain Traversal per risalire fino alla fonte normativa con `legal_weight` e spiegazioni RAG.
+- **Report per Aree Cromatiche**: Report senza punteggio percentuale unico, con stati `COMPLIANT`, `NON_COMPLIANT`, `UNKNOWN` e `REQUIRES_HUMAN_REVIEW`.
+- **API REST Compliance** ([router.py](file:///c:/Users/info/Documents/Sentinell/backend/app/api/router.py)): Endpoints per progetti, wizard, assessment, report, Compliance Chain e KB versions.
+- **Suite di Test M4** ([test_m4_compliance_arks.py](file:///c:/Users/info/Documents/Sentinell/backend/tests/test_m4_compliance_arks.py)): 7 test di accettazione automatizzati per la Definition of Done della M4.
+
+---
+
+## [0.3.0] - M3 LLM Router & Privacy Gate (`m3-router-gates`)
+
+### Aggiunto
+- Provider Registry con lock immodificabile per `deepseek` (403), connettori LLM, Policy Engine (`STRICT`, `BALANCED`, `CUSTOM`), Pre-flight Data & Prompt Gate con restrizioni GDPR Capo V / CH5, Post-flight Scanner e API REST.
 
 ---
 
 ## [0.2.0] - M2 Privacy Engine (`m2-privacy-engine`)
 
 ### Aggiunto
-- Parser multi-formato (DOCX, PDF, TXT, CSV, XLSX, immagini) con estrazione metadati.
-- OCR Ibrido Tesseract + Gemma Vision con cross-check anti-allucinazione.
-- Analyzer Presidio con recognizer italiani e validazione checksum.
-- Pass Semantico Gemma con riallineamento quote anti-allucinazione.
-- Merge Engine, Anonymizer Engine (MASK, REPLACE, GENERALIZE, REMOVE, SEMANTIC), Zero-Residue Validator, Scoring e API REST.
+- Parser multi-formato con metadati, OCR Ibrido Tesseract + Gemma Vision, Analyzer Presidio, Anonymizer Engine, Zero-Residue Validator e Scoring.
 
 ---
 
 ## [0.1.0] - M1 Foundations (`m1-foundations`)
 
 ### Aggiunto
-- Deposito delle specifiche di progetto in `docs/` (`SPEC-ARCHITECTURE.md`, `SPEC-DDL.sql`, `SPEC-RULES-DSL.md`, `SPEC-PROVIDERS.md`, `CHANGELOG.md`).
-- Architettura base backend Python 3.12 / FastAPI blindato su `127.0.0.1`.
-- Database SQLite `data/aigate.db` con schema DDL v0.1.
-- Vault cifrato `data/vault.db` con derivazione Argon2id / PBKDF2 e cifratura AES-GCM 256.
-- Registro Audit Append-Only con Catena Crittografica Hash-Chain.
-- Modello a 3 Zone di Sicurezza con decoratore `@requires_zone_max`.
-- Client HTTP con Allowlist Egress.
-- Valutatore DSL Three-Valued Logic.
+- Specifiche di progetto in `docs/`, architettura FastAPI `127.0.0.1`, SQLite DDL v0.1, Vault Argon2id/AES-GCM, Audit Chain crittografica e Rule DSL 3-valued.

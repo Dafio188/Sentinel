@@ -9,7 +9,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from backend.app.arks.ingest import ArksIngestor
+from backend.app.arks.retrieval import ArksRetrieval
 from backend.app.audit.chain import AuditChainManager
+from backend.app.compliance.engine import ComplianceEngine
+from backend.app.compliance.wizard import AdaptiveWizard, QUESTION_BANK
 from backend.app.core.config import settings
 from backend.app.db.engine import get_db_connection
 from backend.app.gate.postflight import PostflightScanner
@@ -33,6 +37,8 @@ validator = ZeroResidueValidator()
 registry = ProviderRegistry()
 preflight_gate = PreflightGate()
 postflight_scanner = PostflightScanner()
+compliance_engine = ComplianceEngine()
+adaptive_wizard = AdaptiveWizard()
 
 class ProtectRequest(BaseModel):
     strategy: str = "BALANCED"
@@ -55,6 +61,18 @@ class ChatRequestModel(BaseModel):
 class UpdateProviderModel(BaseModel):
     privacy_class: str
 
+class ProjectCreateModel(BaseModel):
+    name: str
+    intended_purpose: Optional[str] = None
+    domain: Optional[str] = None
+
+class WizardAnswerModel(BaseModel):
+    question_id: str
+    answer: Any
+
+class AssessmentRequestModel(BaseModel):
+    deploy_date: Optional[str] = None
+
 @router.get("/health")
 def health_check():
     return {
@@ -72,6 +90,133 @@ def get_audit_verify():
         "first_tampered_seq": tampered_seq if tampered_seq != -1 else None,
         "latest_hash": audit_manager.get_latest_hash(),
     }
+
+# --- Projects & Compliance Endpoints ---
+@router.post("/projects")
+def create_project(req: ProjectCreateModel):
+    proj_id = f"proj_{uuid.uuid4().hex[:12]}"
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO projects (id, name, intended_purpose, domain, status, features_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'DRAFT', '{}', datetime('now'), datetime('now'))
+            """,
+            (proj_id, req.name, req.intended_purpose, req.domain),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": proj_id, "name": req.name, "status": "DRAFT"}
+
+@router.get("/projects/{id}")
+def get_project(id: str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM projects WHERE id = ?", (id,))
+        p = cursor.fetchone()
+        if not p:
+            raise HTTPException(status_code=404, detail="Project not found")
+        features = json.loads(p["features_json"]) if p["features_json"] else {}
+        return {"project": dict(p), "features": features}
+    finally:
+        conn.close()
+
+@router.post("/projects/{id}/wizard/next")
+def wizard_next(id: str, answer: Optional[WizardAnswerModel] = None):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM projects WHERE id = ?", (id,))
+        p = cursor.fetchone()
+        if not p:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        features = json.loads(p["features_json"]) if p["features_json"] else {}
+        if answer:
+            q_info = QUESTION_BANK.get(answer.question_id)
+            if q_info:
+                features[q_info["var_name"]] = answer.answer
+                cursor.execute(
+                    "UPDATE projects SET features_json = ?, updated_at = datetime('now') WHERE id = ?",
+                    (json.dumps(features), id),
+                )
+                conn.commit()
+
+        rules = compliance_engine.load_rules()
+        next_q = adaptive_wizard.get_next_question(features, rules)
+        return {
+            "project_id": id,
+            "next_question": next_q,
+            "completed": next_q is None,
+            "current_features": features,
+        }
+    finally:
+        conn.close()
+
+@router.post("/projects/{id}/assess")
+def assess_project_endpoint(id: str, req: AssessmentRequestModel):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM projects WHERE id = ?", (id,))
+        p = cursor.fetchone()
+        if not p:
+            raise HTTPException(status_code=404, detail="Project not found")
+        features = json.loads(p["features_json"]) if p["features_json"] else {}
+    finally:
+        conn.close()
+
+    res = compliance_engine.assess_project(id, features, deploy_date=req.deploy_date)
+    return res
+
+@router.get("/assessments/{id}/report")
+def get_assessment_report(id: str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM assessments WHERE id = ?", (id,))
+        ass = cursor.fetchone()
+        if not ass:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+
+        cursor.execute("SELECT * FROM assessment_findings WHERE assessment_id = ?", (id,))
+        findings = [dict(r) for r in cursor.fetchall()]
+
+        # Area chromatic status mapping without percentage
+        return {
+            "assessment_id": id,
+            "project_id": ass["project_id"],
+            "kb_version": ass["kb_version"],
+            "overall_status": ass["gdpr_status"],
+            "badge": "🔴 NON_COMPLIANT" if ass["gdpr_status"] == "NON_COMPLIANT" else "🟢 COMPLIANT",
+            "findings": findings,
+        }
+    finally:
+        conn.close()
+
+@router.get("/assessments/{id}/chain/{finding_id}")
+def get_compliance_chain_endpoint(id: str, finding_id: str):
+    chain = compliance_engine.get_compliance_chain(finding_id)
+    if not chain:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return chain
+
+# --- KB Versions ---
+@router.get("/kb/versions")
+def get_kb_versions():
+    return {
+        "versions": [
+            {"id": "KB-2026.07-A", "notes": "AI Act baseline + GDPR", "active": False, "approved_by_human": 1},
+            {"id": "KB-2026.07-B", "notes": "AI Act post-Omnibus (default)", "active": True, "approved_by_human": 0},
+        ]
+    }
+
+@router.post("/kb/versions/{id}/approve")
+def approve_kb_version(id: str):
+    return {"id": id, "approved_by_human": 1, "status": "APPROVED"}
 
 # --- Provider Registry Endpoints ---
 @router.get("/providers")
@@ -99,7 +244,6 @@ def preflight_check(req: PreflightRequestModel):
 
 @router.post("/chat")
 async def chat_orchestrate(req: ChatRequestModel):
-    # 1. Preflight Evaluation
     pre_res = preflight_gate.evaluate(req.provider_id, req.prompt_text, req.document_version_id, req.policy_name)
     if pre_res["gate_result"] == "BLOCK":
         raise HTTPException(
@@ -107,7 +251,6 @@ async def chat_orchestrate(req: ChatRequestModel):
             detail={"message": "Richiesta bloccata dal Privacy Gate", "findings": pre_res["findings"]},
         )
 
-    # 2. Invoke Connector
     provider = registry.get_provider(req.provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
@@ -120,7 +263,6 @@ async def chat_orchestrate(req: ChatRequestModel):
     raw_response = await connector.generate_chat(req.prompt_text)
     resp_text = raw_response.get("text", "")
 
-    # 3. Post-flight Response Scanning
     post_res = postflight_scanner.scan_response(pre_res["request_id"], resp_text)
 
     return {

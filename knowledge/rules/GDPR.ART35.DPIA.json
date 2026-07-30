@@ -1,0 +1,41 @@
+{
+  "rule_id": "GDPR.ART35.DPIA",
+  "framework": "GDPR",
+  "category": "CLASSIFICATION",
+  "severity": "HIGH",
+  "title": "Valutazione d'Impatto sulla Protezione dei Dati (DPIA)",
+  "source_refs": [
+    {"source_id": "EU_2016_679", "article": "35"},
+    {"source_id": "WP248_REV01", "article": "criteria"}
+  ],
+  "condition": {
+    ">=": [
+      {
+        "+": [
+          {"if": [{"var": "profiling"}, 1, 0]},
+          {"if": [{"in": ["SPECIAL", {"var": "data_types"}]}, 1, 0]},
+          {"if": [{"==": [{"var": "automation_level"}, "SOLELY_AUTOMATED"]}, 1, 0]},
+          {"if": [{"==": [{"var": "scale"}, "LARGE"]}, 1, 0]},
+          {"if": [{"var": "systematic_monitoring"}, 1, 0]},
+          {"if": [{"in": ["MINORS", {"var": "affected"}]}, 1, 0]},
+          {"if": [{"var": "new_technology"}, 1, 0]}
+        ]
+      },
+      2
+    ]
+  },
+  "on_true": {
+    "finding": "DPIA_POTENTIALLY_REQUIRED",
+    "action": "REVIEW",
+    "human_review": true
+  },
+  "on_false": {
+    "finding": "DPIA_NOT_INDICATED",
+    "action": "INFO"
+  },
+  "on_unknown": {
+    "finding": "UNKNOWN",
+    "ask": ["Q_SCALE", "Q_DATA_TYPES", "Q_AUTOMATION"]
+  },
+  "kb_version": "KB-2026.07-B"
+}
