@@ -1,16 +1,18 @@
 import os
 from pathlib import Path
 import sqlite3
+from typing import Optional
 from backend.app.core.config import settings, BASE_DIR
 
-def get_db_connection(db_path: Path = settings.DATABASE_PATH) -> sqlite3.Connection:
-    os.makedirs(db_path.parent, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+def get_db_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
+    target_path = db_path if db_path is not None else settings.DATABASE_PATH
+    os.makedirs(target_path.parent, exist_ok=True)
+    conn = sqlite3.connect(target_path)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db(db_path: Path = settings.DATABASE_PATH) -> None:
+def init_db(db_path: Optional[Path] = None) -> None:
     ddl_path = BASE_DIR / "docs" / "SPEC-DDL.sql"
     if not ddl_path.exists():
         raise FileNotFoundError(f"SPEC-DDL.sql non trovato in {ddl_path}")

@@ -2,19 +2,32 @@
 
 Tutti i cambiamenti notevoli a questo progetto saranno documentati in questo file.
 
-## [Unreleased] - M2 Privacy Engine (`m2-privacy-engine`)
+## [Unreleased] - M3 LLM Router & Privacy Gate (`m3-router-gates`)
 
 ### Aggiunto
-- **Parser multi-formato** ([parsers/](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/parsers/)): Parser per DOCX, PDF, TXT, CSV, XLSX e immagini con estrazione metadati come entità `METADATA` (autore, lastModifiedBy, commenti, GPS EXIF).
-- **OCR Ibrido** ([ocr.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/ocr.py)): Tesseract + Gemma Vision con cross-check anti-allucinazione e flag `UNCERTAIN_PII`.
-- **Analyzer deterministico Presidio** ([recognizers.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/recognizers.py), [analyzer.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/analyzer.py)): Recognizers italiani custom con validazione dei checksum per Codice Fiscale, Partita IVA, IBAN, PEC, Telefoni, Targhe, CIE, Tessera Sanitaria, Indirizzi, Matricole, Nomi/Cognomi, Dati Particolari (`SPECIAL`) e Dati Finanziari (`FINANCIAL`).
-- **Pass Semantico Gemma** ([llm_detector.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/llm_detector.py)): Rilevamento di identificazioni indirette con riallineamento delle quote anti-allucinazione.
-- **Merge Engine** ([merge.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/merge.py)): Precedenza deterministica per severità categoria (`SPECIAL` > `IDENTIFIER` > `FINANCIAL` > `INDIRECT`) e affidabilità detector.
-- **Anonymizer Engine** ([anonymizer.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/anonymizer.py), [generalize.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/generalize.py)): Strategie `MASK`, `REPLACE` (Vault-backed), `GENERALIZE`, `REMOVE` e `SEMANTIC` con fallback automatico a `MASK`.
-- **Zero-Residue Validator** ([validator.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/validator.py)): Scansione deterministica per garantire l'assenza di PII residue nel testo protetto.
-- **Scoring & Privacy Snapshot** ([scores.py](file:///c:/Users/info/Documents/Sentinell/backend/app/privacy/scores.py)): Calcolo di `privacy_score`, `utility_score`, `reid_risk` e snapshot JSON.
-- **API REST Privacy Engine** ([router.py](file:///c:/Users/info/Documents/Sentinell/backend/app/api/router.py)): Endpoints `POST /documents`, `POST /documents/{id}/scan`, `POST /documents/{id}/protect`, `GET /documents/{id}/versions`, `GET /versions/{id}/diff`.
-- **Suite di Test M2** ([test_m2_privacy_engine.py](file:///c:/Users/info/Documents/Sentinell/backend/tests/test_m2_privacy_engine.py)): 7 test di accettazione per la Definition of Done della M2.
+- **Provider Registry** ([registry.py](file:///c:/Users/info/Documents/Sentinell/backend/app/llm/registry.py)): Seed dei 5 provider, lock enforcement su `privacy_class_locked` per `deepseek` (403), verifica automatica dell'IP loopback per Ollama e gestione del tier Gemini (`FREE` trattato come `UNKNOWN`).
+- **Connettori LLM Sicuri** ([connectors/](file:///c:/Users/info/Documents/Sentinell/backend/app/llm/connectors/)): Connettore Ollama locale con `num_ctx` esplicito e connettori esterni trasparenti operanti tramite la allowlist egress di `GuardedHttpClient`.
+- **Policy Engine** ([policy.py](file:///c:/Users/info/Documents/Sentinell/backend/app/gate/policy.py)): Valutatore delle policy `STRICT`, `BALANCED` e `CUSTOM`.
+- **Pre-flight Data & Prompt Gate** ([preflight.py](file:///c:/Users/info/Documents/Sentinell/backend/app/gate/preflight.py)):
+  - Invariante I2: Blocco `EXTRACTED` verso provider non-LOCAL.
+  - Controllo `CROSS-02` per PII nel prompt o payload pseudonimizzati.
+  - Applicazione delle restrizioni sui trasferimenti extra-UE (GDPR Capo V / CH5 per DeepSeek).
+  - Rilevamento prompt avversariali o identificazioni personali legate a valutazioni HR (es. "Mario Rossi").
+  - Persistenza in `llm_requests` con rispetto del vincolo `CHECK`.
+- **Chiamata + Post-flight Scanner** ([postflight.py](file:///c:/Users/info/Documents/Sentinell/backend/app/gate/postflight.py)): Scansione risposte LLM per PII in chiaro (`LEAK_SUSPECT`) ed euristica di re-identificazione v1 (`REID_WARNING`).
+- **API REST Gateway** ([router.py](file:///c:/Users/info/Documents/Sentinell/backend/app/api/router.py)): Endpoints `GET/PATCH /providers`, `POST /gate/preflight`, `POST /chat` e `GET /requests/{id}`.
+- **Suite di Test M3** ([test_m3_router_gates.py](file:///c:/Users/info/Documents/Sentinell/backend/tests/test_m3_router_gates.py)): 8 test di accettazione automatizzati per la Definition of Done della M3.
+
+---
+
+## [0.2.0] - M2 Privacy Engine (`m2-privacy-engine`)
+
+### Aggiunto
+- Parser multi-formato (DOCX, PDF, TXT, CSV, XLSX, immagini) con estrazione metadati.
+- OCR Ibrido Tesseract + Gemma Vision con cross-check anti-allucinazione.
+- Analyzer Presidio con recognizer italiani e validazione checksum.
+- Pass Semantico Gemma con riallineamento quote anti-allucinazione.
+- Merge Engine, Anonymizer Engine (MASK, REPLACE, GENERALIZE, REMOVE, SEMANTIC), Zero-Residue Validator, Scoring e API REST.
 
 ---
 

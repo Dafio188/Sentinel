@@ -12,6 +12,11 @@ from pydantic import BaseModel
 from backend.app.audit.chain import AuditChainManager
 from backend.app.core.config import settings
 from backend.app.db.engine import get_db_connection
+from backend.app.gate.postflight import PostflightScanner
+from backend.app.gate.preflight import PreflightGate
+from backend.app.llm.connectors.external import ExternalLLMConnector
+from backend.app.llm.connectors.ollama import OllamaConnector
+from backend.app.llm.registry import ProviderLockedError, ProviderRegistry
 from backend.app.privacy.analyzer import AnalyzerEngine
 from backend.app.privacy.anonymizer import AnonymizerEngine
 from backend.app.privacy.parsers import ParserRegistry
@@ -25,12 +30,30 @@ router = APIRouter()
 audit_manager = AuditChainManager()
 analyzer = AnalyzerEngine()
 validator = ZeroResidueValidator()
+registry = ProviderRegistry()
+preflight_gate = PreflightGate()
+postflight_scanner = PostflightScanner()
 
 class ProtectRequest(BaseModel):
-    strategy: str = "BALANCED"  # MASK, REPLACE, GENERALIZE, REMOVE, SEMANTIC
+    strategy: str = "BALANCED"
     policy_id: Optional[str] = None
     overrides: Optional[List[Dict[str, Any]]] = None
     vault_passphrase: Optional[str] = None
+
+class PreflightRequestModel(BaseModel):
+    provider_id: str
+    prompt_text: str
+    document_version_id: Optional[str] = None
+    policy_name: str = "BALANCED"
+
+class ChatRequestModel(BaseModel):
+    provider_id: str
+    prompt_text: str
+    document_version_id: Optional[str] = None
+    policy_name: str = "BALANCED"
+
+class UpdateProviderModel(BaseModel):
+    privacy_class: str
 
 @router.get("/health")
 def health_check():
@@ -50,7 +73,84 @@ def get_audit_verify():
         "latest_hash": audit_manager.get_latest_hash(),
     }
 
-# 1. POST /documents (ingest + parse + store ZONA 0)
+# --- Provider Registry Endpoints ---
+@router.get("/providers")
+def list_providers():
+    return {"providers": registry.get_providers()}
+
+@router.patch("/providers/{id}")
+def update_provider(id: str, body: UpdateProviderModel):
+    try:
+        updated = registry.update_provider_privacy_class(id, body.privacy_class)
+        return updated
+    except ProviderLockedError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+# --- Gate & Chat Endpoints ---
+@router.post("/gate/preflight")
+def preflight_check(req: PreflightRequestModel):
+    try:
+        res = preflight_gate.evaluate(req.provider_id, req.prompt_text, req.document_version_id, req.policy_name)
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/chat")
+async def chat_orchestrate(req: ChatRequestModel):
+    # 1. Preflight Evaluation
+    pre_res = preflight_gate.evaluate(req.provider_id, req.prompt_text, req.document_version_id, req.policy_name)
+    if pre_res["gate_result"] == "BLOCK":
+        raise HTTPException(
+            status_code=403,
+            detail={"message": "Richiesta bloccata dal Privacy Gate", "findings": pre_res["findings"]},
+        )
+
+    # 2. Invoke Connector
+    provider = registry.get_provider(req.provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    if provider["privacy_class"] == "LOCAL":
+        connector = OllamaConnector(endpoint=provider["endpoint"], model=provider["model"])
+    else:
+        connector = ExternalLLMConnector(provider_id=req.provider_id, endpoint=provider["endpoint"], model=provider["model"])
+
+    raw_response = await connector.generate_chat(req.prompt_text)
+    resp_text = raw_response.get("text", "")
+
+    # 3. Post-flight Response Scanning
+    post_res = postflight_scanner.scan_response(pre_res["request_id"], resp_text)
+
+    return {
+        "request_id": pre_res["request_id"],
+        "gate_result": pre_res["gate_result"],
+        "postflight_result": post_res["postflight_result"],
+        "reid_warning": post_res["reid_warning"],
+        "response_text": post_res["response_text"],
+    }
+
+@router.get("/requests/{id}")
+def get_request_info(id: str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM llm_requests WHERE id = ?", (id,))
+        req = cursor.fetchone()
+        if not req:
+            raise HTTPException(status_code=404, detail="LLM request not found")
+        
+        cursor.execute("SELECT * FROM llm_responses WHERE request_id = ?", (id,))
+        resp = cursor.fetchone()
+        return {
+            "request": dict(req),
+            "response": dict(resp) if resp else None,
+        }
+    finally:
+        conn.close()
+
+# --- Privacy Engine Endpoints ---
 @router.post("/documents")
 async def upload_document(
     file: UploadFile = File(...),
@@ -66,7 +166,6 @@ async def upload_document(
     file_path = orig_dir / f"{doc_id}_{file.filename}"
     file_path.write_bytes(content)
 
-    # Determine parser
     parser = ParserRegistry.get_parser(file.content_type or "") or TextParser()
     if file.filename.endswith(".docx"):
         parser = DocxParser()
@@ -94,7 +193,6 @@ async def upload_document(
             ),
         )
 
-        # Create initial EXTRACTED document version (ZONA 0)
         version_id = f"ver_{uuid.uuid4().hex[:12]}"
         cursor.execute(
             """
@@ -116,7 +214,6 @@ async def upload_document(
         "metadata_count": len(parsed.metadata),
     }
 
-# 2. POST /documents/{id}/scan
 @router.post("/documents/{id}/scan")
 def scan_document(id: str):
     conn = get_db_connection()
@@ -138,10 +235,8 @@ def scan_document(id: str):
         parser = DocxParser() if doc["filename"].endswith(".docx") else TextParser()
         parsed = parser.parse(file_path)
 
-        # Analyze text + metadata
         detected = analyzer.analyze(parsed)
 
-        # Persist detected entities
         for ent in detected:
             ent_id = f"ent_{uuid.uuid4().hex[:12]}"
             cursor.execute(
@@ -173,7 +268,6 @@ def scan_document(id: str):
 
     return {"document_id": id, "detected_entities_count": len(detected), "entities": detected}
 
-# 3. POST /documents/{id}/protect
 @router.post("/documents/{id}/protect")
 def protect_document(id: str, req: ProtectRequest):
     conn = get_db_connection()
@@ -198,10 +292,8 @@ def protect_document(id: str, req: ProtectRequest):
             parsed.text, entities, req.strategy, id, vault_unlocked=vault_unlocked
         )
 
-        # Zero Residue Validator Check
         val_pass, residual = validator.validate(protected_text)
 
-        # Save protected document version in documents/protected/ (ZONA 1)
         prot_dir = settings.DATABASE_PATH.parent.parent / "documents" / "protected"
         os.makedirs(prot_dir, exist_ok=True)
         result_ver_id = f"ver_{uuid.uuid4().hex[:12]}"
@@ -233,7 +325,6 @@ def protect_document(id: str, req: ProtectRequest):
             ),
         )
 
-        # Log anonymization event
         event_id = f"anon_{uuid.uuid4().hex[:12]}"
         cursor.execute(
             """
@@ -272,7 +363,6 @@ def protect_document(id: str, req: ProtectRequest):
         "diff_count": len(diff_list),
     }
 
-# 4. GET /documents/{id}/versions
 @router.get("/documents/{id}/versions")
 def get_document_versions(id: str):
     conn = get_db_connection()
@@ -284,7 +374,6 @@ def get_document_versions(id: str):
     finally:
         conn.close()
 
-# 5. GET /versions/{id}/diff
 @router.get("/versions/{id}/diff")
 def get_version_diff(id: str):
     conn = get_db_connection()
