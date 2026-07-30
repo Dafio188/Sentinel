@@ -2,18 +2,24 @@
 
 Tutti i cambiamenti notevoli a questo progetto saranno documentati in questo file.
 
-## [Unreleased] - M4 ARKS + Compliance Engine (`m4-compliance-arks`)
+## [Unreleased] - M5 Interfaccia Utente Desktop Local (`m5-desktop-ui`)
 
 ### Aggiunto
-- **Knowledge Versions Seed**: Pre-popolamento delle versioni `KB-2026.07-A` (AI Act baseline + GDPR) e `KB-2026.07-B` (AI Act post-Omnibus attiva di default con le date di efficacia progressive dell'Art. 50, NCII, Annex III e Annex I).
-- **Ingestione Fonti & Chunking EUR-Lex** ([ingest.py](file:///c:/Users/info/Documents/Sentinell/backend/app/arks/ingest.py)): Strutturazione dei chunk per articolo/comma (`{FRAMEWORK}_ART{n}_{seq}`) e file `scripts/fetch_sources.md` con le fonti ufficiali.
-- **Retrieval Ibrido BM25 + Vector RRF** ([retrieval.py](file:///c:/Users/info/Documents/Sentinell/backend/app/arks/retrieval.py)): Retrieval ibrido con filtri temporali per data di efficacia e versione KB.
-- **Inventario Regole v0.1 in Rule DSL** ([knowledge/rules/](file:///c:/Users/info/Documents/Sentinell/knowledge/rules/)): Regole GDPR, AI Act post-Omnibus e Cross-Framework in formato JSON JsonLogic 3-valued.
-- **Question Bank & Wizard Adattivo Pesato** ([wizard.py](file:///c:/Users/info/Documents/Sentinell/backend/app/compliance/wizard.py)): 14 domande seed con selezione deterministica basata sulla severità delle regole (`CRITICAL`=4, `HIGH`=3, `MED`=2, `LOW`=1).
-- **Assessment Engine & Compliance Chain** ([engine.py](file:///c:/Users/info/Documents/Sentinell/backend/app/compliance/engine.py)): Valutazione a doppia data (oggi vs `deploy_date`), Compliance Chain Traversal per risalire fino alla fonte normativa con `legal_weight` e spiegazioni RAG.
-- **Report per Aree Cromatiche**: Report senza punteggio percentuale unico, con stati `COMPLIANT`, `NON_COMPLIANT`, `UNKNOWN` e `REQUIRES_HUMAN_REVIEW`.
-- **API REST Compliance** ([router.py](file:///c:/Users/info/Documents/Sentinell/backend/app/api/router.py)): Endpoints per progetti, wizard, assessment, report, Compliance Chain e KB versions.
-- **Suite di Test M4** ([test_m4_compliance_arks.py](file:///c:/Users/info/Documents/Sentinell/backend/tests/test_m4_compliance_arks.py)): 7 test di accettazione automatizzati per la Definition of Done della M4.
+- **Infrastruttura Frontend Next.js** ([frontend/](file:///c:/Users/info/Documents/Sentinell/frontend/)): Setup Next.js 14 App Router, Tailwind CSS, Framer Motion, Lucide Icons e Sonner per i toast notifiche.
+- **Client API TypeScript** ([api.ts](file:///c:/Users/info/Documents/Sentinell/frontend/lib/api.ts)): Client per comunicare in locale con le API REST di AIGate su `http://127.0.0.1:8000/api`.
+- **Layout & Estetica "The Apple Feel"** ([globals.css](file:///c:/Users/info/Documents/Sentinell/frontend/app/globals.css)): Glassmorphism (`backdrop-blur-xl`), squirkle radius, micro-interazioni spring physics, modalità OLED pure black ed interfaccia completamente in italiano.
+- **Dashboard Principale** ([page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/page.tsx)): Widget delle 3 Zone di Sicurezza (0=RED, 1=AMBER, 2=GREEN), contatori documenti scansionati, badge di integrità dell'Audit Chain e stato dei servizi.
+- **Privacy Center** ([privacy/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/frontend/app/privacy/page.tsx)): Upload drag-and-drop, tabella entità PII con evidenziazione per categoria (`SPECIAL`, `IDENTIFIER`, `FINANCIAL`), selettore di strategia (`MASK`, `REPLACE`, `GENERALIZE`, `REMOVE`, `SEMANTIC`), visualizzatore Diff interattivo (originale vs protetto) e sblocco Vault con passphrase.
+- **Compliance Wizard & Assessment** ([compliance/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/compliance/page.tsx)): Wizard adattivo passo-passo con domande dinamiche, report per aree cromatiche (🟢/🟡/🟠/🔴/⚪) e albero interattivo della Compliance Chain Traversal.
+- **LLM Gateway & Chat Interface** ([gateway/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/gateway/page.tsx)): Matrice dei provider LLM con indicatore di blocco/lock su DeepSeek e verifica loopback per Ollama, chat con status Pre-flight Gate ed avvisi PII/HR in tempo reale.
+- **Audit & ARKS Knowledge Center** ([audit/page.tsx](file:///c:/Users/info/Documents/Sentinell/frontend/app/audit/page.tsx)): Registro eventi di audit con pulsante "Verifica Integrità Catena" e gestore versioni KB (`KB-2026.07-A` e `KB-2026.07-B`) con pulsante di approvazione umana ("Conferma e Attiva").
+
+---
+
+## [0.4.0] - M4 ARKS + Compliance Engine (`m4-compliance-arks`)
+
+### Aggiunto
+- Knowledge Versions Seed (`KB-2026.07-A` e `KB-2026.07-B`), ingestione fonti e chunking EUR-Lex, Hybrid Retrieval RRF, 64 regole v0.1 in Rule DSL, question bank & wizard adattivo pesato per severità, assessment engine a doppia data e Compliance Chain Traversal.
 
 ---
 
