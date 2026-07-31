@@ -3,10 +3,12 @@ import hmac
 from typing import Any, Dict, List, Optional
 from backend.app.privacy.parsers.base import ParsedDocument
 from backend.app.privacy.recognizers import DeterministicDetector
+from backend.app.privacy.rizzo_detector import RizzoDetector
 
 class AnalyzerEngine:
     def __init__(self, secret_salt: str = "aigate_local_salt"):
         self.detector = DeterministicDetector()
+        self.rizzo_detector = RizzoDetector()
         self.secret_salt = secret_salt
 
     def _hash_value(self, val: str) -> str:
@@ -25,7 +27,13 @@ class AnalyzerEngine:
             ent["value_hash"] = self._hash_value(ent["value"])
             entities.append(ent)
 
-        # 2. Append document METADATA as detected_entities (detector='METADATA')
+        # 2. Run Rizzo-PII NER detector for local Italian & European token tagger PII
+        rizzo_entities = self.rizzo_detector.scan(parsed_doc.text)
+        for ent in rizzo_entities:
+            ent["value_hash"] = self._hash_value(ent["value"])
+            entities.append(ent)
+
+        # 3. Append document METADATA as detected_entities (detector='METADATA')
         for meta in parsed_doc.metadata:
             val = meta.get("value", "")
             entities.append({
@@ -42,3 +50,4 @@ class AnalyzerEngine:
             })
 
         return entities
+

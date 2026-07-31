@@ -3,7 +3,7 @@ from backend.app.core.http_client import GuardedHttpClient
 from backend.app.llm.connectors.base import BaseLLMConnector
 
 class OllamaConnector(BaseLLMConnector):
-    def __init__(self, endpoint: str = "http://127.0.0.1:11434", model: str = "gemma4", num_ctx: int = 16384):
+    def __init__(self, endpoint: str = "http://127.0.0.1:11434", model: str = "gemma3:4b", num_ctx: int = 16384):
         self.endpoint = endpoint.rstrip("/")
         self.model = model
         self.num_ctx = num_ctx
@@ -24,12 +24,11 @@ class OllamaConnector(BaseLLMConnector):
         }
 
         try:
-            resp = await self.http_client.post(url, json=payload, timeout=30.0)
+            resp = await self.http_client.post(url, json=payload, timeout=120.0)
             if resp.status_code == 200:
                 data = resp.json()
                 content = data.get("message", {}).get("content", "")
                 return {"text": content, "status": "SUCCESS", "raw": data}
-            return {"text": f"[Ollama mock response for: {prompt[:30]}...]", "status": "SUCCESS"}
+            return {"text": f"[Errore HTTP Ollama: {resp.status_code}]", "status": "ERROR"}
         except Exception as e:
-            # Fallback for testing environments without active Ollama daemon
-            return {"text": f"[Ollama local response for: {prompt}]", "status": "SUCCESS", "fallback": True}
+            return {"text": f"[Impossibile connettersi ad Ollama ({self.endpoint}): {str(e)}. Assicurati che Ollama sia in esecuzione.]", "status": "ERROR"}

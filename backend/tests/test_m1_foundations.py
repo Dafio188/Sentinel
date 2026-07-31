@@ -118,19 +118,19 @@ def test_localhost_only():
     client = TestClient(app)
 
     # Request without X-Session-Token header to protected route -> 401
-    resp_no_token = client.get("/audit")
+    resp_no_token = client.get("/api/audit")
     assert resp_no_token.status_code == 401
 
     # Request with invalid token -> 401
-    resp_bad_token = client.get("/audit", headers={"X-Session-Token": "invalid_token"})
+    resp_bad_token = client.get("/api/audit", headers={"X-Session-Token": "invalid_token"})
     assert resp_bad_token.status_code == 401
 
     # Request with valid token -> 200
-    resp_valid = client.get("/audit", headers={"X-Session-Token": SESSION_TOKEN})
+    resp_valid = client.get("/api/audit", headers={"X-Session-Token": SESSION_TOKEN})
     assert resp_valid.status_code == 200
 
-    # /health is accessible without token -> 200
-    resp_health = client.get("/health")
+    # /api/health is accessible without token -> 200
+    resp_health = client.get("/api/health")
     assert resp_health.status_code == 200
 
 # 6. test_llm_requests_check

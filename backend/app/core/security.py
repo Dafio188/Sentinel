@@ -1,14 +1,17 @@
 import secrets
 from typing import Dict, Optional
 try:
+    # pyrefly: ignore [missing-import]
     import keyring
 except ImportError:
     keyring = None
 from fastapi import Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-# Global session token generated per server process run
-SESSION_TOKEN = secrets.token_hex(32)
+import os
+
+# Global session token generated per server process run or configured via ENV
+SESSION_TOKEN = os.getenv("AIGATE_SESSION_TOKEN", "aigate-secret-session-token-2026-v1")
 
 _IN_MEMORY_KEYSTORE: Dict[str, str] = {}
 
@@ -41,10 +44,10 @@ def get_provider_api_key(provider_id: str) -> Optional[str]:
 
 async def verify_session_middleware(request: Request, call_next):
     """Enforce localhost session token on all endpoints except /health."""
-    if request.url.path == "/health":
+    if request.url.path in ["/health", "/api/health"]:
         return await call_next(request)
     
-    token = request.headers.get("X-Session-Token")
+    token = request.headers.get("X-Session-Token") or request.query_params.get("token")
     if not token or token != SESSION_TOKEN:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,

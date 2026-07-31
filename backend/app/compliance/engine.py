@@ -113,16 +113,30 @@ class ComplianceEngine:
             citation = chunks[0]["id"] if chunks else "EUR_LEX_CIT"
 
             finding_id = f"fnd_{uuid.uuid4().hex[:12]}"
+            title = rule.get("title", rule_id)
+            severity = rule.get("severity", "MEDIUM")
+            sources = rule.get("source_refs", [])
+            source_article = ", ".join([f"{s.get('source_id', '')} Art. {s.get('article', '')}" for s in sources]) if sources else "Regolamento UE"
+
+            action_req = get_specific_action_required(rule_id, status)
+
+            color = "RED" if status == "NOT_MET" else "AMBER" if status in ("REVIEW", "REQUIRES_HUMAN_REVIEW") else "WHITE" if status == "UNKNOWN" else "GREEN"
+
             findings.append({
                 "id": finding_id,
                 "rule_id": rule_id,
+                "title": title,
+                "severity": severity,
+                "color_code": color,
+                "action_required": action_req,
                 "framework": rule.get("framework"),
                 "status": status,
                 "applicable_today": applicable_today,
                 "applicable_at_deploy": applicable_at_deploy,
                 "effective_from": effective_from,
+                "source_article": source_article,
                 "explanation": f"[spiegazione generata da AI] {explanation} (Fonte citata: {citation})",
-                "source_refs": rule.get("source_refs", []),
+                "source_refs": sources,
             })
 
         if has_non_compliant:
@@ -190,13 +204,70 @@ class ComplianceEngine:
             target_rule = [r for r in rules if r["rule_id"] == rule_id]
             rule_data = target_rule[0] if target_rule else {}
 
+            sources = rule_data.get("source_refs", [])
+            source_desc = ", ".join([f"{s.get('source_id', '')} Art. {s.get('article', '')}" for s in sources]) if sources else "Normativa EUR-Lex"
+
+            status = f["status"]
+            action = get_specific_action_required(rule_id, status)
+
             return {
                 "finding_id": finding_id,
-                "status": f["status"],
+                "verdict": status,
+                "action": action,
+                "rule_id": rule_id,
+                "rule_title": rule_data.get("title", rule_id),
+                "severity": rule_data.get("severity", "MEDIUM"),
+                "source_article": source_desc,
                 "explanation": f["explanation"],
                 "rule": rule_data,
-                "source_refs": rule_data.get("source_refs", []),
-                "chain_path": "Verdetto <- Azione <- Rischio <- Regola <- Articolo <- Fonte Normativa (EUR-Lex)",
+                "source_refs": sources,
+                "chain_path": f"Esito Finale: {status} ➔ Azione: {action} ➔ Regola: {rule_data.get('title', rule_id)} ➔ Riferimento Normativo: {source_desc}",
             }
         finally:
             conn.close()
+
+
+def get_specific_action_required(rule_id: str, status: str) -> str:
+    """
+    Restituisce un'azione correttiva specifica, operativa e prescrittiva
+    basata sulla norma violata o soggetta a revisione.
+    """
+    actions_map = {
+        "AIACT.ANNEX3.EMPLOYMENT": {
+            "NOT_MET": "Blocco operatività: L'uso di un sistema AI per selezione/valutazione del personale (HR) senza le garanzie dell'Allegato III costituisce una violazione dell'Art. 6 EU AI Act.",
+            "REVIEW": "Eseguire Valutazione di Impatto sui Diritti Fondamentali (FRIA), registrare il sistema nella Banca Dati UE dei sistemi ad alto rischio (Art. 49) e stabilire una procedura formale di sorveglianza umana (Human-in-the-loop) per validare o revocare le decisioni prese dall'AI sui CV.",
+            "UNKNOWN": "Completare nel wizard l'indicazione del settore e delle finalità d'uso per verificare l'assoggettamento alla disciplina degli altoparlanti e sistemi HR ad alto rischio.",
+            "MET": "Sistema HR conforme ai requisiti dell'Allegato III e presidiato da sorveglianza umana."
+        },
+        "GDPR.ART35.DPIA": {
+            "NOT_MET": "Blocco trattamenti: L'analisi di CV contenenti dati identificativi o sensibili con profilazione/automazione richiede obbligatoriamente una DPIA ex Art. 35 GDPR prima dell'avvio.",
+            "REVIEW": "Redigere la DPIA (Valutazione d'Impatto sulla Protezione dei Dati) ai sensi dell'Art. 35 GDPR, documentando la minimizzazione dei dati, i rischi di discriminazione/bias sui candidati e consultando il DPO prima del deployment.",
+            "UNKNOWN": "Completare la selezione dei tipi di dati trattati e del livello di automazione nel wizard per determinare l'obbligo di DPIA.",
+            "MET": "DPIA completata con esito favorevole e misure di mitigazione del rischio attive."
+        },
+        "GDPR.CH5.TRANSFER": {
+            "NOT_MET": "Blocco trasferimento: Il trasferimento dei dati dei candidati verso server Extra-UE (es. USA) senza basi giuridiche o decisioni di adeguatezza viola il Capo V del GDPR.",
+            "REVIEW": "Verificare ed allegare le Clausole Contrattuali Standard (SCC) o verificare l'adesione del provider (es. Google / OpenAI) al EU-US Data Privacy Framework (DPF) per l'invio dei dati personali ai server cloud.",
+            "UNKNOWN": "Indicare l'ubicazione dei server del provider AI utilizzato.",
+            "MET": "Trasferimento Extra-UE garantito da decisioni di adeguatezza o Clausole Contrattuali Standard (SCC)."
+        },
+        "AIACT.ART5.NCII": {
+            "NOT_MET": "PRATICA VIETATA (Art. 5 EU AI Act): Blocco ed eliminazione immediata del sistema. È vietata la generazione o diffusione di contenuti intimi non consenzienti.",
+            "REVIEW": "Fermare lo sviluppo ed attivare audit di sicurezza sulla condotta del modello.",
+            "UNKNOWN": "Confermare la tipologia di output generato ed il consenso degli interessati.",
+            "MET": "Sistema conforme ai divieti dell'Art. 5 EU AI Act."
+        }
+    }
+    
+    rule_actions = actions_map.get(rule_id, {})
+    if status in rule_actions:
+        return rule_actions[status]
+    
+    if status == "NOT_MET":
+        return "Intervento urgente richiesto: blocco o adeguamento prima del deployment per violazione della norma."
+    elif status == "REVIEW":
+        return "Revisione d'impatto e validazione formale raccomandata prima della messa in produzione."
+    elif status == "UNKNOWN":
+        return "Completare le risposte pendenti nel wizard per verificare il rispetto della norma."
+    else:
+        return "Nessuna azione correttiva necessaria (Requisito Conforme)."

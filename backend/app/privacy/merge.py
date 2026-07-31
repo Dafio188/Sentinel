@@ -10,9 +10,10 @@ CATEGORY_WEIGHT = {
 DETECTOR_WEIGHT = {
     "REGEX": 4,
     "METADATA": 4,
+    "RIZZO": 3,
     "OCR": 3,
     "DICT": 2,
-    "NER": 2,
+    "NER": 3,
     "LLM": 1,
 }
 

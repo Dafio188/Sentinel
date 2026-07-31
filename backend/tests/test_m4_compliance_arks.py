@@ -133,3 +133,20 @@ def test_rules_json_schema_validation():
         assert "framework" in r
         assert "condition" in r
         assert "severity" in r
+
+# 8. test_project_feature_extractor
+def test_project_feature_extractor():
+    from backend.app.compliance.extractor import ProjectFeatureExtractor
+    
+    name = "Utilizzando Gemini devo analizzare dei CV di candidati"
+    purpose = "analisi CV per trovare candidati secondo linee guida come anni di esperienza, titolo di studio, età."
+    
+    features = ProjectFeatureExtractor.extract_features(name, purpose)
+    
+    assert features.get("is_ai_system") == "YES"
+    assert features.get("domain") == "employment"
+    assert features.get("purpose") == "recruitment"
+    assert "IDENTIFIER" in features.get("data_types", [])
+    assert "SPECIAL" in features.get("data_types", [])
+    assert features.get("role") == "DEPLOYER"
+

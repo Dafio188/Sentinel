@@ -30,3 +30,6 @@ extracted_instructions.md
 # Frontend
 frontend/dist/
 frontend/node_modules/
+.next/
+frontend/.next/
+

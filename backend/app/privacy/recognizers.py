@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 # Helper checksum for Codice Fiscale Italiano
 ODD_MAP = {
@@ -67,9 +67,83 @@ SPECIAL_KEYWORDS = {
     "SEX_LIFE": ["orientamento sessuale", "vita sessuale"],
 }
 
+class RizzoPiiDetector:
+    """
+    Recognizer integration for Hugging Face model 'rizzoaiacademy/rizzo-pii-0.3B'.
+    Specialized for Italian PII entities (Codice Fiscale, P.IVA, Catasto, IBAN, Names).
+    """
+    def __init__(self, model_name: str = "rizzoaiacademy/rizzo-pii-0.3B"):
+        self.model_name = model_name
+        self.pipeline = None
+        self._load_attempted = False
+
+    def _init_pipeline(self):
+        if self._load_attempted:
+            return
+        self._load_attempted = True
+        try:
+            # pyrefly: ignore [missing-import]
+            from transformers import pipeline  # type: ignore
+            self.pipeline = pipeline("ner", model=self.model_name, aggregation_strategy="simple")
+        except Exception:
+            # Fallback gracefully if model weights or internet connection are not yet active
+            self.pipeline = None
+
+    def scan(self, text: str) -> List[Dict[str, Any]]:
+        self._init_pipeline()
+        entities: List[Dict[str, Any]] = []
+
+        # If Hugging Face pipeline is available
+        if self.pipeline:
+            try:
+                results = self.pipeline(text)
+                for res in results:
+                    entities.append({
+                        "entity_type": res.get("entity_group", "PII"),
+                        "category": "IDENTIFIER",
+                        "detector": "RIZZO_PII",
+                        "confidence": float(res.get("score", 0.95)),
+                        "span_start": res.get("start"),
+                        "span_end": res.get("end"),
+                        "value": res.get("word", ""),
+                        "action": "MASK",
+                        "action_reason": "Entità PII rilevata da modello rizzo-pii-0.3B",
+                    })
+                if len(entities) > 0:
+                    return entities
+            except Exception:
+                pass
+
+        # Dedicated Italian Catasto & Special Legal Entities scanner
+        catasto_pattern = re.compile(
+            r'\b(foglio|fg\.?)\s?\d{1,4}[\s,.-]?(particella|part\.?|mappale|map\.?)\s?\d{1,5}([\s,.-]?(subalterno|sub\.?)\s?\d{1,4})?\b',
+            re.IGNORECASE
+        )
+        for match in catasto_pattern.finditer(text):
+            entities.append({
+                "entity_type": "IT_CATASTO",
+                "category": "IDENTIFIER",
+                "detector": "RIZZO_PII",
+                "confidence": 0.98,
+                "span_start": match.start(),
+                "span_end": match.end(),
+                "value": match.group(0),
+                "action": "MASK",
+                "action_reason": "Coordinate catastali italiane rilevate",
+            })
+
+        return entities
+
 class DeterministicDetector:
+    def __init__(self):
+        self.rizzo_detector = RizzoPiiDetector()
+
     def scan(self, text: str) -> List[Dict[str, Any]]:
         entities: List[Dict[str, Any]] = []
+
+        # 0. Run Rizzo-PII Specialized Italian Detector
+        rizzo_ents = self.rizzo_detector.scan(text)
+        entities.extend(rizzo_ents)
 
         # 1. Codice Fiscale (handling spaces e.g. "RSS MRA 78T13 A662K")
         cf_pattern = re.compile(r'\b[A-Z]{3}\s?[A-Z]{3}\s?\d{2}[A-Z]\d{2}\s?[A-Z]\d{3}\s?[A-Z]\b', re.IGNORECASE)

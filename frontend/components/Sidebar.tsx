@@ -2,14 +2,39 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Shield, Lock, FileText, Cpu, CheckCircle2 } from "lucide-react";
+import { Shield, Lock, FileText, Cpu, CheckCircle2, Info } from "lucide-react";
 
 const navItems = [
-  { label: "Dashboard", href: "/", icon: Shield },
-  { label: "Privacy Center", href: "/privacy", icon: Lock },
-  { label: "Compliance Wizard", href: "/compliance", icon: FileText },
-  { label: "LLM Gateway", href: "/gateway", icon: Cpu },
-  { label: "Audit & ARKS", href: "/audit", icon: CheckCircle2 },
+  {
+    label: "Dashboard",
+    href: "/",
+    icon: Shield,
+    tooltip: "Panoramica delle 3 Zone di Sicurezza e stato della Catena di Audit",
+  },
+  {
+    label: "Privacy Center",
+    href: "/privacy",
+    icon: Lock,
+    tooltip: "Caricamento file, scansione PII ed anonimizzazione (Zona 0 ➔ Zona 1)",
+  },
+  {
+    label: "Compliance Wizard",
+    href: "/compliance",
+    icon: FileText,
+    tooltip: "Valutazione di conformità legale (GDPR + EU AI Act) e report cromatici",
+  },
+  {
+    label: "LLM Gateway",
+    href: "/gateway",
+    icon: Cpu,
+    tooltip: "Chat protetta con Ollama locale ed LLM esterni previa scansione Privacy Gate",
+  },
+  {
+    label: "Audit & ARKS",
+    href: "/audit",
+    icon: CheckCircle2,
+    tooltip: "Registro eventi non manomettibile ed approvazione versioni Knowledge Base",
+  },
 ];
 
 export function Sidebar() {
@@ -36,6 +61,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                title={item.tooltip}
                 className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-md shadow-blue-500/10"
@@ -50,12 +76,13 @@ export function Sidebar() {
         </nav>
       </div>
 
-      <div className="glass-card p-4 rounded-2xl">
-        <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+      <div className="glass-card p-4 rounded-2xl space-y-2">
+        <div className="flex items-center justify-between text-xs text-gray-400">
           <span>Stato Gateway</span>
           <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         </div>
         <p className="text-xs font-semibold text-white">127.0.0.1 (Sicuro)</p>
+        <p className="text-[10px] text-gray-400 leading-tight">Interfaccia protetta per operatore locale</p>
       </div>
     </aside>
   );

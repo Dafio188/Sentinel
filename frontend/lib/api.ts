@@ -1,4 +1,4 @@
-const API_BASE = "http://127.0.0.1:8000/api";
+const API_BASE = "/api";
 const SESSION_TOKEN = "aigate-secret-session-token-2026-v1";
 
 export async function fetchApi(endpoint: string, options: RequestInit = {}) {
@@ -40,6 +40,24 @@ export const api = {
   protectDocument: (id: string, payload: any) =>
     fetchApi(`/documents/${id}/protect`, { method: "POST", body: JSON.stringify(payload) }),
   getVersionDiff: (id: string) => fetchApi(`/versions/${id}/diff`),
+  getDownloadUrl: (id: string) => `${API_BASE}/versions/${id}/download?token=${SESSION_TOKEN}`,
+  downloadVersionFile: async (id: string, filename: string) => {
+    const res = await fetch(`${API_BASE}/versions/${id}/download`, {
+      headers: { "X-Session-Token": SESSION_TOKEN },
+    });
+    if (!res.ok) {
+      throw new Error(`Errore durante il download del file (HTTP ${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
 
   // Providers & Gate
   getProviders: () => fetchApi("/providers"),

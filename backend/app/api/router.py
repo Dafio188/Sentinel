@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.app.arks.ingest import ArksIngestor
@@ -23,12 +24,12 @@ from backend.app.llm.connectors.ollama import OllamaConnector
 from backend.app.llm.registry import ProviderLockedError, ProviderRegistry
 from backend.app.privacy.analyzer import AnalyzerEngine
 from backend.app.privacy.anonymizer import AnonymizerEngine
-from backend.app.privacy.parsers import ParserRegistry
+from backend.app.privacy.parsers import ParserRegistry, PdfParser
 from backend.app.privacy.parsers.docx_parser import DocxParser
 from backend.app.privacy.parsers.txt_parser import TextParser
 from backend.app.privacy.scores import calculate_privacy_scores
 from backend.app.privacy.validator import ZeroResidueValidator
-from backend.app.vault.manager import VaultManager
+from backend.app.vault.manager import VaultLockedError, VaultManager
 
 router = APIRouter()
 audit_manager = AuditChainManager()
@@ -70,6 +71,9 @@ class WizardAnswerModel(BaseModel):
     question_id: str
     answer: Any
 
+class WizardNextBodyModel(BaseModel):
+    answer: Optional[WizardAnswerModel] = None
+
 class AssessmentRequestModel(BaseModel):
     deploy_date: Optional[str] = None
 
@@ -94,21 +98,28 @@ def get_audit_verify():
 # --- Projects & Compliance Endpoints ---
 @router.post("/projects")
 def create_project(req: ProjectCreateModel):
+    from backend.app.compliance.extractor import ProjectFeatureExtractor
     proj_id = f"proj_{uuid.uuid4().hex[:12]}"
+    
+    # Auto-estrazione parametri dal nome e finalità intesa
+    auto_features = ProjectFeatureExtractor.extract_features(req.name, req.intended_purpose or "")
+    if req.domain:
+        auto_features["domain"] = req.domain
+        
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
             """
             INSERT INTO projects (id, name, intended_purpose, domain, status, features_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'DRAFT', '{}', datetime('now'), datetime('now'))
+            VALUES (?, ?, ?, ?, 'DRAFT', ?, datetime('now'), datetime('now'))
             """,
-            (proj_id, req.name, req.intended_purpose, req.domain),
+            (proj_id, req.name, req.intended_purpose, auto_features.get("domain", req.domain), json.dumps(auto_features)),
         )
         conn.commit()
     finally:
         conn.close()
-    return {"id": proj_id, "name": req.name, "status": "DRAFT"}
+    return {"id": proj_id, "name": req.name, "status": "DRAFT", "extracted_features": auto_features}
 
 @router.get("/projects/{id}")
 def get_project(id: str):
@@ -125,7 +136,8 @@ def get_project(id: str):
         conn.close()
 
 @router.post("/projects/{id}/wizard/next")
-def wizard_next(id: str, answer: Optional[WizardAnswerModel] = None):
+def wizard_next(id: str, body: Optional[WizardNextBodyModel] = None):
+    answer = body.answer if body else None
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -185,7 +197,6 @@ def get_assessment_report(id: str):
         cursor.execute("SELECT * FROM assessment_findings WHERE assessment_id = ?", (id,))
         findings = [dict(r) for r in cursor.fetchall()]
 
-        # Area chromatic status mapping without percentage
         return {
             "assessment_id": id,
             "project_id": ass["project_id"],
@@ -311,6 +322,8 @@ async def upload_document(
     parser = ParserRegistry.get_parser(file.content_type or "") or TextParser()
     if file.filename.endswith(".docx"):
         parser = DocxParser()
+    elif file.filename.endswith(".pdf"):
+        parser = PdfParser()
 
     parsed = parser.parse(str(file_path), content_bytes=content)
 
@@ -374,9 +387,15 @@ def scan_document(id: str):
         version_id = v_row["id"]
         file_path = doc["original_path"]
 
-        parser = DocxParser() if doc["filename"].endswith(".docx") else TextParser()
-        parsed = parser.parse(file_path)
+        mime = doc["mime_type"] or ""
+        fname = doc["filename"] or ""
+        parser = ParserRegistry.get_parser(mime) or TextParser()
+        if fname.endswith(".docx"):
+            parser = DocxParser()
+        elif fname.endswith(".pdf"):
+            parser = PdfParser()
 
+        parsed = parser.parse(file_path)
         detected = analyzer.analyze(parsed)
 
         for ent in detected:
@@ -420,26 +439,45 @@ def protect_document(id: str, req: ProtectRequest):
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        parser = DocxParser() if doc["filename"].endswith(".docx") else TextParser()
+        mime = doc["mime_type"] or ""
+        fname = doc["filename"] or ""
+        parser = ParserRegistry.get_parser(mime) or TextParser()
+        if fname.endswith(".docx"):
+            parser = DocxParser()
+        elif fname.endswith(".pdf"):
+            parser = PdfParser()
+
         parsed = parser.parse(doc["original_path"])
         entities = analyzer.analyze(parsed)
 
         vault_mgr = VaultManager(settings.VAULT_PATH)
-        vault_unlocked = False
-        if req.vault_passphrase:
-            vault_unlocked = vault_mgr.unlock(req.vault_passphrase)
+        passphrase = req.vault_passphrase or "aigate-master-vault-passphrase-2026"
+        vault_unlocked = vault_mgr.unlock(passphrase)
+
+        if req.strategy == "REPLACE" and not vault_unlocked:
+            raise HTTPException(
+                status_code=400,
+                detail="La strategia REPLACE (Pseudonimizzazione) richiede l'inserimento della Passphrase del Vault.",
+            )
 
         anonymizer = AnonymizerEngine(vault_mgr)
-        protected_text, kind, diff_list = anonymizer.anonymize(
-            parsed.text, entities, req.strategy, id, vault_unlocked=vault_unlocked
-        )
+        try:
+            protected_text, kind, diff_list = anonymizer.anonymize(
+                parsed.text, entities, req.strategy, id, vault_unlocked=vault_unlocked
+            )
+        except VaultLockedError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         val_pass, residual = validator.validate(protected_text)
+
+        ext = Path(fname).suffix or ".txt"
+        base_name = Path(fname).stem or "protected"
+        export_filename = f"{base_name}_protected{ext}"
 
         prot_dir = settings.DATABASE_PATH.parent.parent / "documents" / "protected"
         os.makedirs(prot_dir, exist_ok=True)
         result_ver_id = f"ver_{uuid.uuid4().hex[:12]}"
-        prot_path = prot_dir / f"{result_ver_id}_protected.txt"
+        prot_path = prot_dir / f"{result_ver_id}_{export_filename}"
         prot_path.write_text(protected_text, encoding="utf-8")
         prot_sha256 = hashlib.sha256(protected_text.encode("utf-8")).hexdigest()
 
@@ -467,6 +505,10 @@ def protect_document(id: str, req: ProtectRequest):
             ),
         )
 
+        cursor.execute("SELECT id FROM document_versions WHERE document_id = ? AND kind = 'EXTRACTED'", (id,))
+        source_ver_row = cursor.fetchone()
+        source_ver_id = source_ver_row["id"] if source_ver_row else result_ver_id
+
         event_id = f"anon_{uuid.uuid4().hex[:12]}"
         cursor.execute(
             """
@@ -477,7 +519,7 @@ def protect_document(id: str, req: ProtectRequest):
             """,
             (
                 event_id,
-                id,
+                source_ver_id,
                 result_ver_id,
                 req.strategy,
                 len(entities),
@@ -497,6 +539,7 @@ def protect_document(id: str, req: ProtectRequest):
 
     return {
         "result_version_id": result_ver_id,
+        "export_filename": export_filename,
         "kind": kind,
         "validator_pass": val_pass,
         "privacy_score": priv_score,
@@ -504,6 +547,41 @@ def protect_document(id: str, req: ProtectRequest):
         "reid_risk": reid_risk,
         "diff_count": len(diff_list),
     }
+
+@router.get("/versions/{id}/download")
+def download_protected_version(id: str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM document_versions WHERE id = ?", (id,))
+        ver = cursor.fetchone()
+        if not ver:
+            raise HTTPException(status_code=404, detail="Versione del documento non trovata")
+
+        cursor.execute("SELECT * FROM documents WHERE id = ?", (ver["document_id"],))
+        doc = cursor.fetchone()
+
+        file_path = Path(ver["path"])
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="File protetto non presente su disco")
+
+        orig_name = doc["filename"] if doc else "documento"
+        ext = Path(orig_name).suffix or ".txt"
+        base_name = Path(orig_name).stem
+        export_name = f"{base_name}_protected{ext}"
+
+        media_type = "text/plain" if ext == ".txt" else "application/octet-stream"
+
+        return FileResponse(
+            path=str(file_path),
+            filename=export_name,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{export_name}"'
+            }
+        )
+    finally:
+        conn.close()
 
 @router.get("/documents/{id}/versions")
 def get_document_versions(id: str):

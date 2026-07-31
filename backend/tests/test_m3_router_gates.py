@@ -105,7 +105,7 @@ def test_provider_lock():
     headers = {"X-Session-Token": SESSION_TOKEN}
 
     # Attempting to PATCH deepseek privacy class must yield HTTP 403
-    resp = client.patch("/providers/deepseek", json={"privacy_class": "LOCAL"}, headers=headers)
+    resp = client.patch("/api/providers/deepseek", json={"privacy_class": "LOCAL"}, headers=headers)
     assert resp.status_code == 403
 
 # 5. test_ollama_loopback
@@ -149,3 +149,23 @@ def test_prompt_gate_mario_rossi():
     res = gate.evaluate("openai", prompt)
     assert any("PROMPT_GATE_HR_EVALUATION" in f.get("rule", "") for f in res["findings"])
     assert res["gate_result"] in ("REVIEW", "BLOCK")
+
+# 9. test_download_version_auth
+def test_download_version_auth(tmp_path):
+    client = TestClient(app)
+    
+    # 1. Unauthenticated download (no token) -> 401
+    res_unauth = client.get("/api/versions/ver_extracted_1/download")
+    assert res_unauth.status_code == 401
+    
+    # 2. Query parameter token download -> 200 (or file path handling)
+    res_query = client.get(f"/api/versions/ver_extracted_1/download?token={SESSION_TOKEN}")
+    assert res_query.status_code in (200, 404)  # 404 if physical temp file absent, but auth 401 passed!
+    
+    # 3. Header token download -> 200 (or 404 for missing dummy file)
+    res_header = client.get(
+        "/api/versions/ver_extracted_1/download",
+        headers={"X-Session-Token": SESSION_TOKEN}
+    )
+    assert res_header.status_code in (200, 404)
+

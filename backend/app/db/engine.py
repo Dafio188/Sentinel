@@ -31,7 +31,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
 def _seed_providers(conn: sqlite3.Connection) -> None:
     providers = [
-        ("ollama-local", "Ollama Local", "http://127.0.0.1:11434", "gemma4", "LOCAL", 0, 1, None, None, None, "LOW", None),
+        ("ollama-local", "Ollama Local", "http://127.0.0.1:11434", "gemma3:4b", "LOCAL", 0, 1, None, None, None, "LOW", None),
         ("anthropic", "Anthropic Claude", "https://api.anthropic.com", "claude-3-5-sonnet", "EXTERNAL", 0, 0, "US", "DPF", "PAID", "MEDIUM", None),
         ("openai", "OpenAI GPT", "https://api.openai.com", "gpt-4o", "EXTERNAL", 0, 0, "US", "DPF", "PAID", "MEDIUM", None),
         ("gemini", "Google Gemini", "https://generativelanguage.googleapis.com", "gemini-1.5-pro", "EXTERNAL", 0, 0, "US", "DPF", "FREE", "MEDIUM", None),

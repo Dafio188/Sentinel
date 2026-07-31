@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS detected_entities (
   document_version_id TEXT NOT NULL REFERENCES document_versions(id),
   entity_type TEXT NOT NULL,
   category TEXT NOT NULL,
-  detector TEXT NOT NULL CHECK (detector IN ('REGEX','DICT','NER','LLM','MERGE','METADATA','OCR')),
+  detector TEXT NOT NULL CHECK (detector IN ('REGEX','DICT','NER','LLM','MERGE','METADATA','OCR','RIZZO_PII')),
   confidence REAL NOT NULL,
   span_start INTEGER,
   span_end INTEGER,
