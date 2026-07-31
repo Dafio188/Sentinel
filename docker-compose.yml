@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sentinel-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AIGATE_SESSION_TOKEN=aigate-secret-session-token-2026-v1
+      - DATABASE_URL=sqlite:////app/data/sentinel.db
+    volumes:
+      - sentinel-data:/app/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: sentinel-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  sentinel-data:
